@@ -8,7 +8,7 @@
 ## those terms.
 
 import options, hashes, strutils, tables, hashes
-import chronos, chronicles
+import chronos, chronicles, nimcrypto/sha2
 import rpc/[messages, message, protobuf],
        timedcache,
        ../../peer,
@@ -52,16 +52,16 @@ proc handle*(p: PubSubPeer, conn: Connection) {.async.} =
     while not conn.closed:
       trace "waiting for data", peer = p.id, closed = conn.closed
       let data = await conn.readLp()
-      let hexData = data.toHex()
+      let digest = $(sha256.digest(data))
       trace "read data from peer", peer = p.id, data = data.shortLog
-      if $hexData.hash in p.recvdRpcCache:
+      if digest in p.recvdRpcCache:
         trace "message already received, skipping", peer = p.id
         continue
 
       let msg = decodeRpcMsg(data)
       trace "decoded msg from peer", peer = p.id, msg = msg.shortLog
       await p.handler(p, @[msg])
-      p.recvdRpcCache.put($hexData.hash)
+      p.recvdRpcCache.put(digest)
   except CatchableError as exc:
     trace "Exception occurred in PubSubPeer.handle", exc = exc.msg
   finally:
@@ -74,19 +74,20 @@ proc send*(p: PubSubPeer, msgs: seq[RPCMsg]) {.async.} =
     for m in msgs:
       trace "sending msgs to peer", toPeer = p.id
       let encoded = encodeRpcMsg(m)
-      let encodedHex = encoded.buffer.toHex()
+      let digest = $(sha256.digest(encoded.buffer))
       if encoded.buffer.len <= 0:
         trace "empty message, skipping", peer = p.id
         return
 
-      if $encodedHex.hash in p.sentRpcCache:
+      if digest in p.sentRpcCache:
         trace "message already sent to peer, skipping", peer = p.id
         continue
 
       proc sendToRemote() {.async.} =
-        trace "sending encoded msgs to peer", peer = p.id, encoded = encoded.buffer.shortLog
+        trace "sending encoded msgs to peer", peer = p.id,
+                                              encoded = encoded.buffer.shortLog
         await p.sendConn.writeLp(encoded.buffer)
-        p.sentRpcCache.put($encodedHex.hash)
+        p.sentRpcCache.put(digest)
 
       # if no connection has been set,
       # queue messages untill a connection

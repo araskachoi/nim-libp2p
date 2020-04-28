@@ -90,7 +90,7 @@ method handleDisconnect(g: GossipSub, peer: PubSubPeer) {.async.} =
   trace "peer disconnected", peer=peer.id
 
   await procCall FloodSub(g).handleDisconnect(peer)
- 
+
   for t in g.gossipsub.keys:
     g.gossipsub[t].excl(peer.id)
 
@@ -99,6 +99,11 @@ method handleDisconnect(g: GossipSub, peer: PubSubPeer) {.async.} =
 
   for t in g.fanout.keys:
     g.fanout[t].excl(peer.id)
+
+method subscribeToPeer*(p: GossipSub,
+                        conn: Connection) {.async.} =
+  await procCall PubSub(p).subscribeToPeer(conn)
+  asyncCheck p.handleConn(conn, GossipSubCodec)
 
 method subscribeTopic*(g: GossipSub,
                        topic: string,
@@ -484,7 +489,7 @@ when isMainModule:
         if not isNil(tracker):
           # echo tracker.dump()
           check tracker.isLeaked() == false
-   
+
     test "`rebalanceMesh` Degree Lo":
       proc testRun(): Future[bool] {.async.} =
         let gossipSub = newPubSub(TestGossipSub,

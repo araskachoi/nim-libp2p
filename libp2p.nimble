@@ -30,5 +30,8 @@ task test, "Runs the test suite":
   runTest("testdaemon")
   runTest("testinterop")
 
+task testinterop, "Run interop tests":
+  runTest("testinterop")
+
 task examples_build, "Build the samples":
   buildSample("directchat")

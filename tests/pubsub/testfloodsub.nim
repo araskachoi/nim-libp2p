@@ -238,11 +238,10 @@ suite "FloodSub":
       for i in 0..<10:
         nodes.add newStandardSwitch()
 
-
       var awaitters: seq[Future[void]]
       for i in 0..<10:
         awaitters.add(await nodes[i].start())
-      
+
       await subscribeNodes(nodes)
 
       for i in 0..<10:

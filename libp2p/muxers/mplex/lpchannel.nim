@@ -64,16 +64,19 @@ proc newChannel*(id: uint64,
   result.initBufferStream(writeHandler, size)
 
 proc closeMessage(s: LPChannel) {.async.} =
-  await s.conn.writeMsg(s.id, s.closeCode) # write header
+  try:
+    await s.conn.writeMsg(s.id, s.closeCode) # write header
+  except LPStreamEOFError as exc:
+    trace "unable to send close, stream is EOF", exc = exc.msg
 
-proc cleanUp*(s: LPChannel): Future[void] =
+proc cleanUp*(s: LPChannel): Future[void] {.async.} =
   # method which calls the underlying buffer's `close`
   # method used instead of `close` since it's overloaded to
   # simulate half-closed streams
-  result = procCall close(BufferStream(s))
+  await procCall close(BufferStream(s))
 
 proc tryCleanup(s: LPChannel) {.async, inline.} =
-  # if stream is EOF, then cleanup immediatelly
+  # if stream is EOF, then cleanup immediately
   if s.closedRemote and s.len == 0:
     await s.cleanUp()
 
@@ -91,30 +94,32 @@ method close*(s: LPChannel) {.async, gcsafe.} =
   await s.closeMessage()
 
 proc resetMessage(s: LPChannel) {.async.} =
-  await s.conn.writeMsg(s.id, s.resetCode)
+  try:
+    await s.conn.writeMsg(s.id, s.resetCode)
+  except CatchableError as exc:
+    trace "unable to send reset message", exc = exc.msg
 
 proc resetByRemote*(s: LPChannel) {.async.} =
-  # Immediately block futher calls
+  # Immediately block further calls
   s.isReset = true
 
   # start and await async teardown
   let
     futs = await allFinished(
-      s.close(),
-      s.closedByRemote(),
+      # s.close(),
+      # s.closedByRemote(),
       s.cleanUp()
     )
 
   checkFutures(futs, [LPStreamEOFError])
 
 proc reset*(s: LPChannel) {.async.} =
-  let
-    futs = await allFinished(
-      s.resetMessage(),
-      s.resetByRemote()
-    )
+  # asyncCheck s.resetMessage()
 
-  checkFutures(futs, [LPStreamEOFError])
+  try:
+    await s.resetByRemote()
+  except LPStreamEOFError as exc:
+    trace "exception cleaning up on reset", exc = exc.msg
 
 method closed*(s: LPChannel): bool =
   trace "closing lpchannel", id = s.id, initiator = s.initiator

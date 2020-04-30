@@ -159,9 +159,6 @@ method newStream*(m: Mplex,
 method close*(m: Mplex) {.async, gcsafe.} =
   trace "closing mplex muxer"
 
-  if not m.connection.closed():
-    await m.connection.close()
-
   let
     futs = await allFinished(
       toSeq(m.remote.values).mapIt(it.reset()) &

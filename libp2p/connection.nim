@@ -79,11 +79,13 @@ proc bindStreamClose(conn: Connection) {.async.} =
     await conn.stream.closeEvent.wait()
     trace "wrapped stream closed, about to close conn", closed = conn.isClosed,
                                                         peer = if not isNil(conn.peerInfo):
-                                                          conn.peerInfo.id else: ""
+                                                          conn.peerInfo.id else: "",
+                                                        oid = conn.oid
     if not conn.isClosed:
       trace "wrapped stream closed, closing conn", closed = conn.isClosed,
                                                     peer = if not isNil(conn.peerInfo):
-                                                      conn.peerInfo.id else: ""
+                                                      conn.peerInfo.id else: "",
+                                                    oid = conn.oid
       await conn.close()
 
 proc init[T: Connection](self: var T, stream: LPStream): T =
@@ -96,6 +98,8 @@ proc init[T: Connection](self: var T, stream: LPStream): T =
   asyncCheck self.bindStreamClose()
   inc getConnectionTracker().opened
   libp2p_open_connection.inc()
+
+  trace "created new connection", oid = self.oid
 
   return self
 
@@ -158,7 +162,8 @@ method closed*(s: Connection): bool =
 method close*(s: Connection) {.async, gcsafe.} =
   trace "about to close connection", closed = s.closed,
                                      peer = if not isNil(s.peerInfo):
-                                       s.peerInfo.id else: ""
+                                       s.peerInfo.id else: "",
+                                    oid = s.oid
 
   if not s.isClosed:
     s.isClosed = true
@@ -167,19 +172,21 @@ method close*(s: Connection) {.async, gcsafe.} =
     if not isNil(s.stream) and not s.stream.closed:
       trace "closing child stream", closed = s.closed,
                                     peer = if not isNil(s.peerInfo):
-                                      s.peerInfo.id else: ""
+                                      s.peerInfo.id else: "",
+                                    oid = s.oid
       await s.stream.close()
 
     s.closeEvent.fire()
 
-    trace "waiting readloops", count=s.readLoops.len
+    trace "waiting readloops", count=s.readLoops.len, oid = s.oid
     let loopFuts = await allFinished(s.readLoops)
     checkFutures(loopFuts)
     s.readLoops = @[]
 
     trace "connection closed", closed = s.closed,
                                peer = if not isNil(s.peerInfo):
-                                 s.peerInfo.id else: ""
+                                 s.peerInfo.id else: "",
+                               oid = s.oid
     libp2p_open_connection.dec()
 
 proc readLp*(s: Connection): Future[seq[byte]] {.async, gcsafe.} =
@@ -201,14 +208,14 @@ proc readLp*(s: Connection): Future[seq[byte]] {.async, gcsafe.} =
       raise newInvalidVarintSizeException()
     buff.setLen(size)
     if size > 0.uint:
-      trace "reading exact bytes from stream", size = size
+      trace "reading exact bytes from stream", size = size, oid = s.oid
       await s.readExactly(addr buff[0], int(size))
     return buff
   except LPStreamIncompleteError as exc:
-    trace "remote connection ended unexpectedly", exc = exc.msg
+    trace "remote connection ended unexpectedly", exc = exc.msg, oid = s.oid
     raise exc
   except LPStreamReadError as exc:
-    trace "couldn't read from stream", exc = exc.msg
+    trace "couldn't read from stream", exc = exc.msg, oid = s.oid
     raise exc
 
 proc writeLp*(s: Connection, msg: string | seq[byte]): Future[void] {.gcsafe.} =

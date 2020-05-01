@@ -31,14 +31,14 @@ proc newChronosStream*(server: StreamServer,
 template withExceptions(body: untyped) =
   try:
     body
-  except TransportIncompleteError:
-    raise newLPStreamIncompleteError()
-  except TransportLimitError:
-    raise newLPStreamLimitError()
-  except TransportError as exc:
-    raise newLPStreamIncorrectError(exc.msg)
   except AsyncStreamIncompleteError:
     raise newLPStreamIncompleteError()
+  except AsyncStreamLimitError:
+    raise newLPStreamLimitError()
+  except AsyncStreamIncorrectError as exc:
+    raise newLPStreamIncorrectError(exc.msg)
+  except AsyncStreamReadError as exc:
+    raise newLPStreamReadError(exc)
 
 method read*(s: ChronosStream, n = -1): Future[seq[byte]] {.async.} =
   if s.reader.atEof:

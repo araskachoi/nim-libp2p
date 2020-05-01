@@ -179,7 +179,7 @@ method readMessage(sconn: SecioConn): Future[seq[byte]] {.async.} =
   ## Read message from channel secure connection ``sconn``.
   when chronicles.enabledLogLevel == LogLevel.TRACE:
     logScope:
-      stream_oid = $sconn.stream.oid
+      oid = $sconn.stream.oid
   try:
     var buf = newSeq[byte](4)
     await sconn.readExactly(addr buf[0], 4)

@@ -153,6 +153,9 @@ proc cleanupConn(s: Switch, conn: Connection) {.async, gcsafe.} =
     if not(conn.peerInfo.isClosed()):
       conn.peerInfo.close()
 
+    if not conn.closed:
+      await conn.close()
+
 proc disconnect*(s: Switch, peer: PeerInfo) {.async, gcsafe.} =
   let conn = s.connections.getOrDefault(peer.id)
   if not isNil(conn):
@@ -193,6 +196,8 @@ proc upgradeIncoming(s: Switch, conn: Connection) {.async, gcsafe.} =
     trace "Securing connection"
     let secure = s.secureManagers[proto]
     let sconn = await secure.secure(conn, false)
+    defer: await s.cleanupConn(sconn)
+
     if not isNil(sconn):
       # add the muxer
       for muxer in s.muxers.values:
@@ -200,7 +205,6 @@ proc upgradeIncoming(s: Switch, conn: Connection) {.async, gcsafe.} =
 
     # handle subsequent requests
     await ms.handle(sconn)
-    await sconn.close()
 
   if (await ms.select(conn)): # just handshake
     # add the secure handlers
@@ -294,8 +298,8 @@ proc start*(s: Switch): Future[seq[Future[void]]] {.async, gcsafe.} =
     except CatchableError as exc:
       trace "Exception occurred in Switch.start", exc = exc.msg
     finally:
+      trace "cleaning up transport handler"
       await conn.close()
-      await s.cleanupConn(conn)
 
   var startFuts: seq[Future[void]]
   for t in s.transports: # for each transport

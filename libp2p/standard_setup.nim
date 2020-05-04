@@ -28,7 +28,8 @@ proc newStandardSwitch*(privKey = none(PrivateKey),
                         address = MultiAddress.init("/ip4/127.0.0.1/tcp/0"),
                         triggerSelf = false,
                         gossip = false,
-                        verifySignature = false): Switch =
+                        verifySignature = true,
+                        sign = true): Switch =
   proc createMplex(conn: Connection): Muxer =
     result = newMplex(conn)
 
@@ -43,10 +44,19 @@ proc newStandardSwitch*(privKey = none(PrivateKey),
     let secureManagers = {NoiseCodec: newNoise(seckey).Secure}.toTable
   else:
     let secureManagers = {SecioCodec: newSecio(seckey).Secure}.toTable
+
   let pubSub = if gossip:
-                 PubSub newPubSub(GossipSub, peerInfo, triggerSelf, verifySignature)
+                 PubSub newPubSub(GossipSub,
+                                  peerInfo = peerInfo,
+                                  triggerSelf = triggerSelf,
+                                  verifySignature = verifySignature,
+                                  sign = sign)
                else:
-                 PubSub newPubSub(FloodSub, peerInfo, triggerSelf, verifySignature)
+                 PubSub newPubSub(FloodSub,
+                                  peerInfo = peerInfo,
+                                  triggerSelf = triggerSelf,
+                                  verifySignature = verifySignature,
+                                  sign = sign)
 
   result = newSwitch(peerInfo,
                      transports,
@@ -54,4 +64,3 @@ proc newStandardSwitch*(privKey = none(PrivateKey),
                      muxers,
                      secureManagers = secureManagers,
                      pubSub = some(pubSub))
-

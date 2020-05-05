@@ -35,6 +35,7 @@ type
     msgCode*: MessageType
     closeCode*: MessageType
     resetCode*: MessageType
+    resetLock*: AsyncLock
 
 proc newChannel*(id: uint64,
                  conn: Connection,
@@ -50,6 +51,7 @@ proc newChannel*(id: uint64,
   result.msgCode = if initiator: MessageType.MsgOut else: MessageType.MsgIn
   result.closeCode = if initiator: MessageType.CloseOut else: MessageType.CloseIn
   result.resetCode = if initiator: MessageType.ResetOut else: MessageType.ResetIn
+  result.resetLock = newAsyncLock()
   result.isLazy = lazy
 
   let chan = result
@@ -96,30 +98,49 @@ method close*(s: LPChannel) {.async, gcsafe.} =
 proc resetMessage(s: LPChannel) {.async.} =
   try:
     await s.conn.writeMsg(s.id, s.resetCode)
+    trace "succesfully reset channel"
   except CatchableError as exc:
     trace "unable to send reset message", exc = exc.msg
 
 proc resetByRemote*(s: LPChannel) {.async.} =
-  # Immediately block further calls
+  if s.isReset:
+    trace "channel already reset"
+    return
+
+  defer: s.resetLock.release()
+  await s.resetLock.acquire()
+
   s.isReset = true
-
-  # start and await async teardown
-  let
-    futs = await allFinished(
-      # s.close(),
-      # s.closedByRemote(),
-      s.cleanUp()
-    )
-
-  checkFutures(futs, [LPStreamEOFError])
+  s.closedLocal = true
+  s.closedRemote = true
+  await s.cleanUp()
 
 proc reset*(s: LPChannel) {.async.} =
-  # asyncCheck s.resetMessage()
+  if s.isReset:
+    trace "channel already reset"
+    return
+
+  defer: s.resetLock.release()
+  await s.resetLock.acquire()
 
   try:
-    await s.resetByRemote()
-  except LPStreamEOFError as exc:
-    trace "exception cleaning up on reset", exc = exc.msg
+    # we set a timeout here, because the remote
+    # channel can be unresponsive/unreachable;
+    # ie, dropped unexpectedly, thus we can't
+    # rely on the channel responding at all,
+    # hence we give it 10 seconds and then simply
+    # dispose of it in `resetByRemote`
+    await wait(s.resetMessage(), 10.seconds)
+  except AsyncTimeoutError as exc:
+    trace "resetting timed out, dispose the channel", exc = exc.msg
+
+  try:
+    s.isReset = true
+    s.closedLocal = true
+    s.closedRemote = true
+    await s.cleanUp()
+  except CatchableError as exc:
+    trace "unable to reset channel", exc = exc.msg
 
 method closed*(s: LPChannel): bool =
   trace "closing lpchannel", id = s.id, initiator = s.initiator

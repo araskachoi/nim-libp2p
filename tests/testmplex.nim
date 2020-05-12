@@ -166,38 +166,38 @@ suite "Mplex":
     expect LPStreamEOFError:
       waitFor(testResetWrite())
 
-  # test "reset - channel should fail reading":
-  #   proc testResetRead(): Future[void] {.async.} =
-  #     proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
-  #     let
-  #       conn = newBufferStream(writeHandler)
-  #       chann = newChannel(1, conn, true)
+  test "reset - channel should fail reading":
+    proc testResetRead() {.async.} =
+      proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
+      let
+        conn = newBufferStream(writeHandler)
+        chann = newChannel(1, conn, true)
 
-  #     try:
-  #       await chann.reset()
-  #       var data = newSeq[byte](1)
-  #       await chann.readExactly(addr data[0], 1)
-  #       doAssert(len(data) == 1)
-  #     finally:
-  #       await conn.close()
+      try:
+        await chann.reset()
+        var data = newSeq[byte](1)
+        await chann.readExactly(addr data[0], 1)
+        doAssert(len(data) == 1)
+      finally:
+        await conn.close()
 
-  #   expect LPStreamEOFError:
-  #     waitFor(testResetRead())
+    expect LPStreamEOFError:
+      waitFor(testResetRead())
 
-  # test "reset - channel should fail writing":
-  #   proc testResetWrite(): Future[void] {.async.} =
-  #     proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
-  #     let
-  #       conn = newBufferStream(writeHandler)
-  #       chann = newChannel(1, conn, true)
-  #     try:
-  #       await chann.reset()
-  #       await chann.write(cast[seq[byte]]("Hello!"))
-  #     finally:
-  #       await conn.close()
+  test "reset - channel should fail writing":
+    proc testResetWrite() {.async.} =
+      proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
+      let
+        conn = newBufferStream(writeHandler)
+        chann = newChannel(1, conn, true)
+      try:
+        await chann.reset()
+        await chann.write(cast[seq[byte]]("Hello!"))
+      finally:
+        await conn.close()
 
-  #   expect LPStreamEOFError:
-  #     waitFor(testResetWrite())
+    expect LPStreamClosedError:
+      waitFor(testResetWrite())
 
   # test "read/write receiver":
   #   proc testNewStream() {.async.} =
@@ -230,7 +230,7 @@ suite "Mplex":
   #     # so we need to give them some time
   #     # to properly pipe data
   #     await allFuturesThrowing(conn1.close(), conn2.close())
-  #     await done.wait(1.seconds)
+  #     await done.wait(5.seconds)
   #     await allFuturesThrowing(listenHandler, dialHandler)
 
   #   waitFor(testNewStream())
@@ -253,7 +253,7 @@ suite "Mplex":
         await mplexListen.close()
 
       let transport1: TcpTransport = newTransport(TcpTransport)
-      let lfut = await transport1.listen(ma, connHandler)
+      let listenFut = await transport1.listen(ma, connHandler)
 
       let transport2: TcpTransport = newTransport(TcpTransport)
       let conn = await transport2.dial(transport1.ma)
@@ -270,7 +270,7 @@ suite "Mplex":
       await conn.close()
       await mplexDialFut
       await allFuturesThrowing(transport1.close(), transport2.close())
-      await lfut
+      await listenFut
 
     waitFor(testNewStream())
 

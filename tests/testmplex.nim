@@ -74,8 +74,9 @@ suite "Mplex":
 
   test "decode header with channel id 0":
     proc testDecodeHeader() {.async.} =
-      let conn = newBufferStream()
-      await conn.pushTo(fromHex("000873747265616d2031"))
+      let stream = newBufferStream()
+      let conn = newConnection(newBufferStream())
+      await stream.pushTo(fromHex("000873747265616d2031"))
       let msg = await conn.readMsg()
 
       check msg.id == 0
@@ -86,8 +87,9 @@ suite "Mplex":
 
   test "decode header and body with channel id 0":
     proc testDecodeHeader() {.async.} =
-      let conn = newBufferStream()
-      await conn.pushTo(fromHex("021668656C6C6F2066726F6D206368616E6E656C20302121"))
+      let stream = newBufferStream()
+      let conn = newConnection(stream)
+      await stream.pushTo(fromHex("021668656C6C6F2066726F6D206368616E6E656C20302121"))
       let msg = await conn.readMsg()
 
       check msg.id == 0
@@ -99,8 +101,9 @@ suite "Mplex":
 
   test "decode header and body with channel id other than 0":
     proc testDecodeHeader() {.async.} =
-      let conn = newBufferStream()
-      await conn.pushTo(fromHex("8a011668656C6C6F2066726F6D206368616E6E656C20302121"))
+      let stream = newBufferStream()
+      let conn = newConnection(stream)
+      await stream.pushTo(fromHex("8a011668656C6C6F2066726F6D206368616E6E656C20302121"))
       let msg = await conn.readMsg()
 
       check msg.id == 17
@@ -114,7 +117,7 @@ suite "Mplex":
     proc testClosedForWrite() {.async.} =
       proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
       let
-        conn = newBufferStream(writeHandler)
+        conn = newConnection(newBufferStream(writeHandler))
         chann = newChannel(1, conn, true)
       try:
         await chann.close()
@@ -129,10 +132,10 @@ suite "Mplex":
   test "half closed - channel should close for read by remote":
     proc testClosedForRead() {.async.} =
       let
-        conn = newBufferStream(
+        conn = newConnection(newBufferStream(
           proc (data: seq[byte]) {.gcsafe, async.} =
             result = nil
-        )
+        ))
         chann = newChannel(1, conn, true)
 
       try:
@@ -154,7 +157,7 @@ suite "Mplex":
     proc testResetWrite() {.async.} =
       proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
       let
-        conn = newBufferStream(writeHandler)
+        conn = newConnection(newBufferStream(writeHandler))
         chann = newChannel(1, conn, true)
       try:
         await chann.closeRemote()
@@ -170,7 +173,7 @@ suite "Mplex":
     proc testResetRead() {.async.} =
       proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
       let
-        conn = newBufferStream(writeHandler)
+        conn = newConnection(newBufferStream(writeHandler))
         chann = newChannel(1, conn, true)
 
       try:
@@ -188,7 +191,7 @@ suite "Mplex":
     proc testResetWrite() {.async.} =
       proc writeHandler(data: seq[byte]) {.async, gcsafe.} = discard
       let
-        conn = newBufferStream(writeHandler)
+        conn = newConnection(newBufferStream(writeHandler))
         chann = newChannel(1, conn, true)
       try:
         await chann.reset()

@@ -1,5 +1,5 @@
 import unittest, strformat, strformat, random
-import chronos, nimcrypto/utils, chronicles
+import chronos, nimcrypto/utils, chronicles, stew/byteutils
 import ../libp2p/[errors,
                   connection,
                   stream/lpstream,
@@ -374,9 +374,9 @@ suite "Mplex":
         mplexListen.streamHandler = proc(stream: Connection)
           {.async, gcsafe.} =
           let msg = await stream.readLp(1024)
-          check cast[string](msg) == &"stream {count}!"
-          await stream.close()
+          check string.fromBytes(msg) == &"stream {count}!"
           count.inc
+          await stream.close()
           if count == 10:
             done.complete()
 
